@@ -38,12 +38,11 @@ def next_block(last_block, data):
     return Block(index, timestamp, data, last_block.hash)
 
 
-if __name__ == "__main__":
-    block = create_genesis_block()
-    blockchain = [block]
-    for i in range(0, 20):
-        new_block = next_block(block, "testfest")
-        blockchain.append(new_block)
-        block = new_block
-        print("Block #{} added!".format(new_block.index))
-        print("Hash: {}\n".format(new_block.hash))
+block = create_genesis_block()
+blockchain = [block]
+for i in range(0, 20):
+    new_block = next_block(block, "testfest")
+    blockchain.append(new_block)
+    block = new_block
+    print("Block #{} added!".format(new_block.index))
+    print("Hash: {}\n".format(new_block.hash))
