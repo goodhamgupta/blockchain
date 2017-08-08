@@ -1,12 +1,43 @@
+import json
+import hashlib
+from datetime import datetime
 from flask import Flask
 from flask import request
-from block import *
 node = Flask(__name__)
 
+
+class Block:
+    def __init__(self, index, timestamp, data, previous_hash):
+        self.index = index
+        self.timestamp = timestamp
+        self.data = data
+        self.previous_hash = previous_hash
+        self.hash = self.hash_block()
+
+    def hash_block(self):
+        sha = hashlib.sha256()
+        sha.update(str(self.index) + str(self.timestamp) + str(self.data) + str(self.previous_hash))
+        return sha.hexdigest()
+
+
+def create_genesis_block():
+    # Manually construct a block with
+    # index zero and arbitrary previous hash
+    return Block(0, datetime.now(), {
+        "proof-of-work": 9,
+        "transactions": None
+    }, "0")
+
+
+blockchain = []
+blockchain.append(create_genesis_block())
+
 current_node_transactions = []
+peer_nodes = []
+miner_address = "q3nf394hjg-random-miner-address-34nf3i4nflkn3oi"
 
 
-@node.route('/txion', methods=['POST',])
+@node.route('/txion', methods=['POST'])
 def transaction():
     new_transaction = request.get_json()
     current_node_transactions.append(new_transaction)
@@ -14,11 +45,7 @@ def transaction():
     print("FROM: {}".format(new_transaction.get('from')))
     print("TO: {}".format(new_transaction.get('to')))
     print("AMOUNT: {}\n".format(new_transaction.get('amount')))
-
-node.run()
-
-
-miner_address = "q3nf394hjg-random-miner-address-34nf3i4nflkn3oi"
+    return json.dumps({"message": "Complete"})
 
 def proof_of_work(last_proof):
     """
@@ -30,17 +57,17 @@ def proof_of_work(last_proof):
 
     return incrementor
 
-@node.route('/mine', methods=['GET',])
+@node.route('/mine', methods=['GET'])
 def mine():
     last_block = blockchain[-1]
-    last_proof = last_block.data['proof_of_work']
+    last_proof = last_block.data['proof-of-work']
     proof = proof_of_work(last_proof)
     current_node_transactions.append(
         { "from": "network", "to": miner_address, "amount": 1 }
     )
 
     new_block_data = {
-        "proof_of_work": proof,
+        "proof-of-work": proof,
         "transactions": list(current_node_transactions)
     }
 
@@ -49,16 +76,15 @@ def mine():
     last_hash = last_block.hash
     mined_block = Block(new_block_index, new_block_timestamp, new_block_data, last_hash)
     blockchain.append(mined_block)
-
     return json.dumps(
         {
             "index": new_block_index,
-            "timestamp": new_block_timestamp,
+            "timestamp": new_block_timestamp.isoformat(),
             "data": new_block_data,
-            "hash": new_block_hash
+            "hash": mined_block.hash
         })
 
-@node.route('/blocks', methods=['GET',])
+@node.route('/blocks', methods=['GET'])
 def get_blocks():
     """
     Function to implement the consensus algorithm
@@ -88,13 +114,32 @@ def get_blocks():
 
 
 def find_new_chains():
-    other_chains = find_new_chains()
-    longest_chain = blockchain
-    for chain in other_chains:
-        if len(chain) > len(longest_chain):
-            longest_chain = chain
-
+    other_chains = []
+    for node_url in peer_nodes:
+        # Get their chains using a GET request
+        block = requests.get(node_url + "/blocks").content
+        # Convert the JSON object to a Python dictionary
+        block = json.loads(block)
+        # Add it to our list
+        other_chains.append(block)
+    return other_chains
     # If longest chain isn't our we reset our chain to the longest one
     blockchain = longest_chain
 
-node.run()
+
+def consensus():
+    # Get the blocks from other nodes
+    other_chains = find_new_chains()
+    # If our chain isn't longest,
+    # then we store the longest chain
+    longest_chain = blockchain
+    for chain in other_chains:
+        if len(longest_chain) < len(chain):
+            longest_chain = chain
+    # If the longest chain isn't ours,
+    # then we stop mining and set
+    # our chain to the longest one
+    blockchain = longest_chain
+
+if __name__ == "__main__":
+    node.run()
